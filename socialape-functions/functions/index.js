@@ -4,6 +4,7 @@ const serviceAccount = require('/Users/gauravgulati/Desktop/socialape-3be06-fire
 const config = require('./config')
 const app = require('express')();
 const firebase = require('firebase')
+const helpers = require('./validateHelpers')
 firebase.initializeApp(config)
 
 // admin.initializeApp();
@@ -66,6 +67,20 @@ app.post('/signup', (req,res) => {
         handle: req.body.handle
     }
 
+    let errors = {};
+
+    if(helpers.isEmpty(newUser.email)) {
+        errors.email = 'Must not be empty.'
+    } else if(!helpers.isEmail(newUser.email)) {
+        errors.email = 'Must be a valid email address'
+    }
+
+    if(helpers.isEmpty(newUser.password)) errors.password = "Must not be empty";
+    if(newUser.password !== newUser.confirmPassword) errors.confirmPassword = "Passwords must match";
+    if(helpers.isEmpty(newUser.handle)) errors.hanlde = "Must not be empty";
+
+    if(Object.keys(errors).length > 0) return res.status(400).json(errors);
+
     //validate data
     let token, userId;
     db.doc(`/users/${newUser.handle}`).get()
@@ -101,6 +116,37 @@ app.post('/signup', (req,res) => {
                 return res.status(500).json({error : err.code})
             }
         })
+})
+
+app.post('/login', (req,res) => {
+    const user = {
+        email: req.body.email,
+        password: req.body.password
+    };
+
+    let errors = {}
+
+    if(helpers.isEmpty(user.email)) errors.email = 'Must not be empty';
+    if(helpers.isEmpty(user.password)) errors.password = 'Must not be empty';
+      
+    if(Object.keys(errors).length > 0) return res.status(400).json(errors);
+    
+    firebase.auth().signInWithEmailAndPassword(user.email, user.password)
+        .then((data) => {
+            return data.user.getIdToken();
+        })
+        .then((token) => {
+            return res.json({token: token})
+        })
+        .catch((err) => {
+            console.log(err);
+            if(err.code === 'auth/wrong-password') {
+                return res.status(403).json({ general: 'Wrong credentials, please try again.'})
+            }
+            else {
+                return res.status(500).json({ error: err.code });
+            }
+        });
 })
 
 exports.api = functions.https.onRequest(app);
